@@ -49,7 +49,7 @@ var (
 			Name:      "open_pull_requests",
 			Help:      "Open Pull Requests sent by dependabot",
 		},
-		[]string{"username", "reponame", "library", "language", "from_version", "to_version", "directory", "security"},
+		[]string{"username", "reponame", "full_reponame", "library", "language", "from_version", "to_version", "directory", "security"},
 	)
 )
 
@@ -173,14 +173,15 @@ func collect() {
 		}
 
 		labels := prometheus.Labels{
-			"username":     githubUsername,
-			"reponame":     githubReponame,
-			"library":      pr.Library,
-			"language":     pr.Language,
-			"from_version": pr.FromVersion,
-			"to_version":   pr.ToVersion,
-			"directory":    pr.Directory,
-			"security":     security,
+			"username":      githubUsername,
+			"reponame":      githubReponame,
+			"full_reponame": githubUsername + "/" + githubReponame,
+			"library":       pr.Library,
+			"language":      pr.Language,
+			"from_version":  pr.FromVersion,
+			"to_version":    pr.ToVersion,
+			"directory":     pr.Directory,
+			"security":      security,
 		}
 		openPullRequestsGauge.With(labels).Set(1)
 	}
