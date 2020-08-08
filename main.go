@@ -43,14 +43,7 @@ var (
 	client *github.Client
 	ctx    = context.Background()
 
-	openPullRequestsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "open_pull_requests",
-			Help:      "Open Pull Requests sent by dependabot",
-		},
-		[]string{"username", "reponame", "full_reponame", "library", "language", "from_version", "to_version", "directory", "security"},
-	)
+	openPullRequestsGauge *prometheus.GaugeVec
 )
 
 func init() {
@@ -63,16 +56,6 @@ func init() {
 }
 
 func searchIssues() chan *github.Issue {
-	githubUsername = os.Getenv("GITHUB_USERNAME")
-	if githubUsername == "" {
-		log.Fatal("GITHUB_USERNAME is not set")
-	}
-
-	githubReponame = os.Getenv("GITHUB_REPONAME")
-	if githubReponame == "" {
-		log.Fatal("GITHUB_REPONAME is not set")
-	}
-
 	issueChan := make(chan *github.Issue)
 
 	go func() {
@@ -153,6 +136,34 @@ func parseDependabotPullRequest(issue *github.Issue) (*dependabotPullRequest, er
 }
 
 func main() {
+	githubUsername = os.Getenv("GITHUB_USERNAME")
+	if githubUsername == "" {
+		log.Fatal("GITHUB_USERNAME is not set")
+	}
+
+	githubReponame = os.Getenv("GITHUB_REPONAME")
+	if githubReponame == "" {
+		log.Fatal("GITHUB_REPONAME is not set")
+	}
+
+	openPullRequestsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "open_pull_requests",
+			Help:      "Open Pull Requests sent by dependabot",
+			ConstLabels: prometheus.Labels{
+				"username":      githubUsername,
+				"reponame":      githubReponame,
+				"full_reponame": fmt.Sprintf("%s/%s", githubUsername, githubReponame),
+			},
+		},
+		[]string{"library", "language", "from_version", "to_version", "directory", "security"},
+	)
+
+	prometheus.MustRegister(
+		openPullRequestsGauge,
+	)
+
 	go collectTicker()
 
 	http.Handle("/metrics", promhttp.Handler())
@@ -160,6 +171,8 @@ func main() {
 }
 
 func collect() {
+	openPullRequestsGauge.Reset()
+
 	for issue := range searchIssues() {
 		pr, err := parseDependabotPullRequest(issue)
 		if err != nil {
@@ -173,33 +186,20 @@ func collect() {
 		}
 
 		labels := prometheus.Labels{
-			"username":      githubUsername,
-			"reponame":      githubReponame,
-			"full_reponame": githubUsername + "/" + githubReponame,
-			"library":       pr.Library,
-			"language":      pr.Language,
-			"from_version":  pr.FromVersion,
-			"to_version":    pr.ToVersion,
-			"directory":     pr.Directory,
-			"security":      security,
+			"library":      pr.Library,
+			"language":     pr.Language,
+			"from_version": pr.FromVersion,
+			"to_version":   pr.ToVersion,
+			"directory":    pr.Directory,
+			"security":     security,
 		}
 		openPullRequestsGauge.With(labels).Set(1)
 	}
 }
 
 func collectTicker() {
-	collected := false
-
 	for {
 		collect()
-
-		if !collected {
-			prometheus.MustRegister(
-				openPullRequestsGauge,
-			)
-		}
-
-		collected = true
 		time.Sleep(CollectIntervalSeconds * time.Second)
 	}
 }
