@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/go-github/v32/github"
@@ -38,7 +40,6 @@ const namespace = "github_dependabot"
 
 var (
 	githubUsername string
-	githubReponame string
 
 	client *github.Client
 	ctx    = context.Background()
@@ -55,13 +56,13 @@ func init() {
 
 }
 
-func searchIssues() chan *github.Issue {
+func searchIssues(reponame string) chan *github.Issue {
 	issueChan := make(chan *github.Issue)
 
 	go func() {
 		var lastCreated *time.Time
 		for {
-			query := fmt.Sprintf("repo:%s/%s is:pr is:open label:dependencies", githubUsername, githubReponame)
+			query := fmt.Sprintf("repo:%s/%s is:pr is:open label:dependencies", githubUsername, reponame)
 			if lastCreated != nil {
 				query = query + " created:>" + lastCreated.Format(time.RFC3339)
 			}
@@ -141,9 +142,9 @@ func main() {
 		log.Fatal("GITHUB_USERNAME is not set")
 	}
 
-	githubReponame = os.Getenv("GITHUB_REPONAME")
-	if githubReponame == "" {
-		log.Fatal("GITHUB_REPONAME is not set")
+	githubReponames, rnErr := getRepoNames()
+	if rnErr != nil {
+		log.Fatal(rnErr.Error())
 	}
 
 	openPullRequestsGauge = prometheus.NewGaugeVec(
@@ -152,28 +153,40 @@ func main() {
 			Name:      "open_pull_requests",
 			Help:      "Open Pull Requests sent by dependabot",
 			ConstLabels: prometheus.Labels{
-				"username":      githubUsername,
-				"reponame":      githubReponame,
-				"full_reponame": fmt.Sprintf("%s/%s", githubUsername, githubReponame),
+				"username": githubUsername,
 			},
 		},
-		[]string{"library", "language", "from_version", "to_version", "directory", "security"},
+		[]string{"reponame", "full_reponame", "library", "language", "from_version", "to_version", "directory", "security"},
 	)
 
 	prometheus.MustRegister(
 		openPullRequestsGauge,
 	)
 
-	go collectTicker()
+	go collectTicker(githubReponames)
 
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe("0.0.0.0:8000", nil))
 }
 
-func collect() {
+func collect(reponames []string) {
 	openPullRequestsGauge.Reset()
 
-	for issue := range searchIssues() {
+	wg := &sync.WaitGroup{}
+
+	for _, reponame := range reponames {
+		wg.Add(1)
+		go func(repo string) {
+			collectFromRepo(repo)
+			wg.Done()
+		}(reponame)
+	}
+
+	wg.Wait()
+}
+
+func collectFromRepo(reponame string) {
+	for issue := range searchIssues(reponame) {
 		pr, err := parseDependabotPullRequest(issue)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to parse: #%d: %s\n", issue.GetNumber(), issue.GetTitle())
@@ -186,20 +199,36 @@ func collect() {
 		}
 
 		labels := prometheus.Labels{
-			"library":      pr.Library,
-			"language":     pr.Language,
-			"from_version": pr.FromVersion,
-			"to_version":   pr.ToVersion,
-			"directory":    pr.Directory,
-			"security":     security,
+			"reponame":      reponame,
+			"full_reponame": fmt.Sprintf("%s/%s", githubUsername, reponame),
+			"library":       pr.Library,
+			"language":      pr.Language,
+			"from_version":  pr.FromVersion,
+			"to_version":    pr.ToVersion,
+			"directory":     pr.Directory,
+			"security":      security,
 		}
 		openPullRequestsGauge.With(labels).Set(1)
 	}
 }
 
-func collectTicker() {
+func collectTicker(reponames []string) {
 	for {
-		collect()
+		collect(reponames)
 		time.Sleep(CollectIntervalSeconds * time.Second)
 	}
+}
+
+func getRepoNames() ([]string, error) {
+	githubReponame := os.Getenv("GITHUB_REPONAME")
+	if githubReponame != "" {
+		return []string{githubReponame}, nil
+	}
+
+	githubReponames := os.Getenv("GITHUB_REPONAMES")
+	if githubReponames != "" {
+		return strings.Split(githubReponames, ","), nil
+	}
+
+	return []string{}, fmt.Errorf("GITHUB_REPONAMES is not specified")
 }
