@@ -4,7 +4,7 @@ metadata:
   name: github-dependabot-prometheus
 data:
   GITHUB_USERNAME: YOUR_GITHUB_USERNAME
-  GITHUB_REPONAME: YOUR_GITHUB_REPONAME
+  GITHUB_REPONAMES: YOUR_GITHUB_REPONAMES (comma-separated list)
   GITHUB_TOKEN: YOUR_GITHUB_TOKEN
 ---
 apiVersion: apps/v1
