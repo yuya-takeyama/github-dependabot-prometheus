@@ -8,8 +8,6 @@ on:
     tags:
       - v*.*.*
 
-  pull_request:
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
