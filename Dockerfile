@@ -8,6 +8,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"'
 
 FROM alpine:3.12
 
+LABEL org.opencontainers.image.source https://github.com/yuya-takeyama/github-dependabot-prometheus
+
 RUN apk --update add ca-certificates
 
 COPY --from=builder /app/github-dependabot-prometheus /github-dependabot-prometheus
