@@ -24,8 +24,13 @@ jobs:
           password: ${{ secrets.CONTAINER_REGISTRY_TOKEN }}
       - id: docker-tag
         uses: yuya-takeyama/docker-tag-from-github-ref-action@v1
+      - id: docker-tags
+        uses: yuya-takeyama/replicate-docker-version-tag-action@v1
+        with:
+          image: user/app
+          tag: ${{ steps.docker-tag.outputs.tag }}
       - name: Build and push
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: ghcr.io/yuya-takeyama/github-dependabot-prometheus:${{ steps.docker-tag.outputs.tag }}
+          tags: ${{ steps.docker-tags.outputs.tags }}
