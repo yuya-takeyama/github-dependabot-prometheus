@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
         - name: github-dependabot-prometheus
-          image: yuyat/github-dependabot-prometheus
+          image: ghcr.io/yuya-takeyama/github-dependabot-prometheus:0.2.0
           envFrom:
             - configMapRef:
                 name: github-dependabot-prometheus
