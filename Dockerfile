@@ -6,7 +6,7 @@ WORKDIR /app
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"'
 
-FROM alpine:3.12
+FROM alpine:3.15
 
 LABEL org.opencontainers.image.source https://github.com/yuya-takeyama/github-dependabot-prometheus
 
