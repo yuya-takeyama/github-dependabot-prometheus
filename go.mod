@@ -1,6 +1,6 @@
 module github.com/yuya-takeyama/github-dependabot-prometheus
 
-go 1.14
+go 1.19
 
 require (
 	github.com/google/go-github/v32 v32.1.0
